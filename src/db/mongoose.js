@@ -71,41 +71,45 @@ const User = mongoose.model("User", {
 	},
 });
 
-const newUser = new User({
-	name: "name sample",
-	email: "ani@gmail.com",
-	password: "rohitAni@123",
-	age: 23,
-});
-
-newUser
-	.save()
-	.then((user) => {
-		console.log(user);
-	})
-	.catch((error) => {
-		console.log("Error! ", error.message);
-	});
-
-const Task = mongoose.model("Task", {
-	description: {
-		type: String,
-	},
-	completed: {
-		type: Boolean,
-	},
-});
-
-// const newTask = new Task({
-// 	description: "Start coding 3 months plan",
-// 	completed: false,
+// const newUser = new User({
+// 	name: "name sample",
+// 	email: "ani@gmail.com",
+// 	password: "rohitAni@123",
+// 	age: 23,
 // });
-//
-// newTask
+
+// newUser
 // 	.save()
-// 	.then((task) => {
-// 		console.log(task);
+// 	.then((user) => {
+// 		console.log(user);
 // 	})
 // 	.catch((error) => {
 // 		console.log("Error! ", error.message);
 // 	});
+
+const Task = mongoose.model("Task", {
+	description: {
+		type: String,
+		minlength: [6, "Must be atleast 6 letters long"],
+		required: [true, "Decription of the task is required"],
+		trim: true,
+	},
+	completed: {
+		type: Boolean,
+		default: false,
+	},
+});
+
+const newTask = new Task({
+	description: "Start coding 3 months plan",
+	completed: false,
+});
+
+newTask
+	.save()
+	.then((task) => {
+		console.log(task);
+	})
+	.catch((error) => {
+		console.log("Error! ", error.message);
+	});
