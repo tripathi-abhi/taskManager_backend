@@ -88,19 +88,15 @@ userRouter.patch("/users/:id", async (req, res) => {
 		updatesRequested.forEach(updateField => {
 			user[updateField] = req.body[updateField];
 		});
-		console.log(user);
 
-		user.save();
-
-		// const options = {
-		// 	new: true,
-		// 	runValidators: true,
-		// };
-		// const user = await User.findByIdAndUpdate(req.params.id, req.body, options);
-		if (!user) {
-			return res.status(404).send();
-		}
-		res.send(user);
+		user
+			.save()
+			.then(data => {
+				return res.status(404).send(data);
+			})
+			.catch(e => {
+				res.status(500).send(e);
+			});
 	} catch (error) {
 		res.status(400).send(error);
 	}

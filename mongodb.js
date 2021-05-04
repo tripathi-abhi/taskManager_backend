@@ -36,7 +36,7 @@ MongoClient.connect(
 			.deleteMany({
 				completion: true,
 			})
-			.then((result) => console.log(result.deletedCount))
-			.catch((error) => console.log(error));
+			.then(result => console.log(result.deletedCount))
+			.catch(error => console.log(error));
 	}
 );

@@ -85,15 +85,16 @@ taskRouter.patch("/tasks/:id", async (req, res) => {
 		return res.status(400).send({ error: "Invalid update request" });
 	}
 	try {
-		const options = {
-			new: true,
-			runValidators: true,
-		};
-		const task = await Task.findByIdAndUpdate(req.params.id, req.body, options);
-		if (!task) {
-			return res.status(404).send();
-		}
-		res.send(task);
+		const task = await Task.findById(req.params.id);
+		requestedUpdates.forEach(field => (task[field] = req.body[field]));
+		task
+			.save()
+			.then(data => {
+				return res.status(201).send(data);
+			})
+			.catch(e => {
+				return res.status(400).send(e);
+			});
 	} catch (error) {
 		res.status(400).send(error);
 	}
