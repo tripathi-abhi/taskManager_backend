@@ -2,6 +2,7 @@ const express = require("express");
 const auth = require("../middlewares/auth");
 const User = require("../models/user_model");
 const multer = require("multer");
+const sharp = require("sharp");
 
 // creating a new router. The newly created router has same methods like express instance get,post,patch,delete,etc.
 
@@ -126,7 +127,14 @@ userRouter.post(
 		if (!req.file) {
 			res.status(500).send({ error: "Select a file to upload" });
 		}
-		req.user.avatar = req.file.buffer;
+		const buffer = await sharp(req.file.buffer)
+			.resize({
+				width: 250,
+				height: 250,
+			})
+			.png()
+			.toBuffer();
+		req.user.avatar = buffer;
 		await req.user.save();
 		res.status(200).send();
 	},
@@ -144,6 +152,20 @@ userRouter.delete("/users/me/avatar", auth, async (req, res) => {
 		res.status(200).send();
 	} catch (e) {
 		res.status(500).send(e.message);
+	}
+});
+
+// get user avatar
+userRouter.get("/users/:id/avatar", async (req, res) => {
+	try {
+		const user = await User.findById(req.params.id);
+		if (!user || !user.avatar) {
+			throw new Error();
+		}
+		res.set("content-type", "image/png");
+		res.send(user.avatar);
+	} catch (e) {
+		res.status(404).send();
 	}
 });
 
