@@ -1,5 +1,6 @@
 const express = require("express");
 const Task = require("../models/task_model");
+const auth = require("../middlewares/auth");
 
 // creating a new router. The newly created router has same methods like express instance get,post,patch,delete,etc.
 
@@ -7,75 +8,70 @@ const taskRouter = new express.Router();
 
 // to add task for a user
 
-taskRouter.post("/tasks", async (req, res) => {
-	const task = new Task(req.body);
-
+taskRouter.post("/tasks", auth, async (req, res) => {
 	try {
+		const task = new Task({ ...req.body, owner: req.user._id });
 		const addedTask = await task.save();
 		res.status(201).send(addedTask);
 	} catch (error) {
 		res.status(400).send(error);
 	}
-
-	// task
-	// 	.save()
-	// 	.then((addedTask) => {
-	// 		res.status(201).send(addedTask);
-	// 	})
-	// 	.catch((error) => {
-	// 		res.status(400).send(error);
-	// 	});
 });
 
-// get all tasks
+// get user tasks with pagination and sorting
 
-taskRouter.get("/tasks", async (req, res) => {
+// ?limit=10&skikp=fa-rotate-18
+// ?completed=rue
+// ?sortBy=createdAt:desc
+
+taskRouter.get("/tasks", auth, async (req, res) => {
+	const match = {};
+	const sort = {};
+	if (req.query.sortBy) {
+		const sortArray = req.query.sortBy.split(":");
+		if (sortArray[0] && sortArray[1]) {
+			sort[sortArray[0]] = sortArray[1] === "desc" ? -1 : 1;
+		}
+	}
+	if (req.query.completed) {
+		match.completed = req.query.completed === "false" ? false : true;
+	}
 	try {
-		const tasks = await Task.find({});
-		res.send(tasks);
+		await req.user
+			.populate({
+				path: "tasks",
+				match,
+				options: {
+					limit: parseInt(req.query.limit),
+					skip: parseInt(req.query.skip),
+					sort,
+				},
+			})
+			.execPopulate();
+		res.send(req.user.tasks);
 	} catch (error) {
 		res.status(500).send(error);
 	}
-
-	// Task.find({})
-	// 	.then((tasks) => {
-	// 		res.send(tasks);
-	// 	})
-	// 	.catch((error) => {
-	// 		res.status(500).send(error);
-	// 	});
 });
 
 // get a task by id
 
-taskRouter.get("/tasks/:id", async (req, res) => {
-	const _id = req.params.id;
-
+taskRouter.get("/tasks/:id", auth, async (req, res) => {
 	try {
-		const task = await Task.findById(_id);
+		const _id = req.params.id;
+		const task = await Task.findOne({ _id, owner: req.user.id });
 		if (!task) {
 			return res.status(404).send();
 		}
 		res.send(task);
 	} catch (error) {
-		res.status(500).send(error);
+		res.status(500).send(error.message);
 	}
-
-	// Task.findById(_id)
-	// 	.then((task) => {
-	// 		if (!task) {
-	// 			return res.status(404).send();
-	// 		}
-	// 		res.send(task);
-	// 	})
-	// 	.catch((error) => {
-	// 		res.status(500).send(error);
-	// 	});
 });
 
 // update a task
 
-taskRouter.patch("/tasks/:id", async (req, res) => {
+taskRouter.patch("/tasks/:id", auth, async (req, res) => {
 	const requestedUpdates = Object.keys(req.body);
 	const allowedUpdates = ["description", "completed"];
 	const isValidRequest = requestedUpdates.every(update =>
@@ -85,16 +81,13 @@ taskRouter.patch("/tasks/:id", async (req, res) => {
 		return res.status(400).send({ error: "Invalid update request" });
 	}
 	try {
-		const task = await Task.findById(req.params.id);
+		const task = await Task.findOne({ _id: req.params.id, owner: req.user.id });
+		if (!task) {
+			return res.status(404).send();
+		}
 		requestedUpdates.forEach(field => (task[field] = req.body[field]));
-		task
-			.save()
-			.then(data => {
-				return res.status(201).send(data);
-			})
-			.catch(e => {
-				return res.status(400).send(e);
-			});
+		await task.save();
+		return res.status(201).send(task);
 	} catch (error) {
 		res.status(400).send(error);
 	}
@@ -102,12 +95,13 @@ taskRouter.patch("/tasks/:id", async (req, res) => {
 
 // to delete a task by id
 
-taskRouter.delete("/tasks/:id", async (req, res) => {
+taskRouter.delete("/tasks/:id", auth, async (req, res) => {
 	try {
-		const task = await Task.findByIdAndDelete(req.params.id);
+		const task = await Task.findOne({ _id: req.params.id, owner: req.user.id });
 		if (!task) {
 			return res.status(404).send();
 		}
+		await task.remove();
 		res.send(task);
 	} catch (error) {
 		res.status(500).send(error);

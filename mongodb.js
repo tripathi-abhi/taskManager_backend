@@ -13,6 +13,7 @@ MongoClient.connect(
 	{
 		useNewUrlParser: true,
 		useUnifiedTopology: true,
+		autoIndex: true,
 	},
 	(error, client) => {
 		if (error) {

@@ -1,5 +1,7 @@
 const express = require("express");
+const auth = require("../middlewares/auth");
 const User = require("../models/user_model");
+const multer = require("multer");
 
 // creating a new router. The newly created router has same methods like express instance get,post,patch,delete,etc.
 
@@ -8,111 +10,140 @@ const userRouter = new express.Router();
 // creating a user
 
 userRouter.post("/users", async (req, res) => {
-	const user = new User(req.body);
-
 	try {
+		const user = new User(req.body);
 		const addedUser = await user.save();
-		res.status(201).send(addedUser);
+		const token = await addedUser.generateAuthToken();
+		res.status(201).send({ addedUser, token });
 	} catch (error) {
-		res.status(400).send(error);
+		const errMsg = error.message;
+		res.status(400).send({ error, errMsg });
 	}
-
-	// user
-	// 	.save()
-	// 	.then((addedUser) => {
-	// 		res.status(201).send(addedUser);
-	// 	})
-	// 	.catch((error) => {
-	// 		res.status(400).send(error);
-	// 	});
 });
 
-// get all users
+// login
 
-userRouter.get("/users", async (req, res) => {
+userRouter.post("/users/login", async (req, res) => {
 	try {
-		const users = await User.find({});
-		res.send(users);
-	} catch (error) {
-		res.status(500).send(error);
+		const loggedInUser = await User.findByCredentials(req.body);
+		const token = await loggedInUser.generateAuthToken();
+		return res.send({ loggedInUser, token });
+	} catch (e) {
+		return res.status(400).send(e.message);
 	}
-
-	// User.find({})
-	// 	.then((users) => {
-	// 		res.send(users);
-	// 	})
-	// 	.catch((error) => {
-	// 		res.status(500).send(error);
-	// 	});
 });
 
-// get a user by id
+// logout
 
-userRouter.get("/users/:id", async (req, res) => {
+userRouter.post("/users/logout", auth, async (req, res) => {
 	try {
-		const _id = req.params.id;
-		const user = await User.findById(_id);
-		if (!user) {
-			return res.status(404).send();
-		}
-		res.send(user);
-	} catch (error) {
-		res.status(500).send(error);
+		req.user.tokens = req.user.tokens.filter(
+			token => token.token !== req.token
+		);
+		await req.user.save();
+		return res.send();
+	} catch (e) {
+		return res.status(400).send(e.message);
 	}
-
-	// User.findById(_id)
-	// 	.then((user) => {
-	// 		if (!user) {
-	// 			return res.status(404).send();
-	// 		}
-	// 		res.send(user);
-	// 	})
-	// 	.catch((e) => {
-	// 		res.status(500).send(e);
-	// 	});
 });
 
-// update user by id
+// logout of all devices
 
-userRouter.patch("/users/:id", async (req, res) => {
+userRouter.post("/users/logoutAll", auth, async (req, res) => {
+	try {
+		req.user.tokens = [];
+		await req.user.save();
+		return res.send();
+	} catch (e) {
+		return res.staus(400).send();
+	}
+});
+
+// get your profile
+
+userRouter.get("/users/me", auth, async (req, res) => {
+	try {
+		const user = req.user;
+		return res.send(user);
+	} catch (error) {
+		res.status(400).send();
+	}
+});
+
+// update user details
+
+userRouter.patch("/users/updateme", auth, async (req, res) => {
 	const updatesRequested = Object.keys(req.body);
 	const allowedUpdates = ["name", "age", "email", "password"];
 	const isValidRequest = updatesRequested.every(update =>
 		allowedUpdates.includes(update)
 	);
 	if (!isValidRequest) {
-		return res.status(400).send({ error: "Inavlid update request" });
+		return res.status(400).send({ error: "Invalid update request" });
 	}
 	try {
-		const user = await User.findById(req.params.id);
+		const user = req.user;
 		updatesRequested.forEach(updateField => {
 			user[updateField] = req.body[updateField];
 		});
-
-		user
-			.save()
-			.then(data => {
-				return res.status(404).send(data);
-			})
-			.catch(e => {
-				res.status(500).send(e);
-			});
+		await user.save();
+		return res.status(201).send(user);
 	} catch (error) {
-		res.status(400).send(error);
+		res.status(500).send(error);
 	}
 });
 
 // to delete a user by id
 
-userRouter.delete("/users/:id", async (req, res) => {
+userRouter.delete("/users/deleteme", auth, async (req, res) => {
 	try {
-		const user = await User.findByIdAndDelete(req.params.id);
-		if (!user) {
-			return res.status(404).send();
-		}
-		res.send(user);
+		req.user.remove();
+		res.send(req.user);
 	} catch (error) {
 		res.status(500).send(error);
+	}
+});
+
+// upload user avatar
+const uploads = multer({
+	limits: {
+		fileSize: 1000000,
+	},
+	fileFilter(req, file, cb) {
+		if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+			console.log("here");
+			return cb(new Error("Not a valid image type"));
+		}
+		return cb(null, true);
+	},
+});
+
+userRouter.post(
+	"/users/me/avatar",
+	auth,
+	uploads.single("avatar"),
+	async (req, res) => {
+		if (!req.file) {
+			res.status(500).send({ error: "Select a file to upload" });
+		}
+		req.user.avatar = req.file.buffer;
+		await req.user.save();
+		res.status(200).send();
+	},
+	(err, req, res, next) => {
+		res.status(400).send({ error: err.message });
+	}
+);
+
+// remove user avatar
+
+userRouter.delete("/users/me/avatar", auth, async (req, res) => {
+	try {
+		req.user.avatar = undefined;
+		await req.user.save();
+		res.status(200).send();
+	} catch (e) {
+		res.status(500).send(e.message);
 	}
 });
 
